@@ -146,6 +146,7 @@ enum votable_type {
 #define VOOC_TOPIC_VOTER	"VOOC_TOPIC_VOTER"
 #define UFCS_TOPIC_VOTER	"UFCS_TOPIC_VOTER"
 #define CPA_TOPIC_VOTER		"CPA_TOPIC_VOTER"
+#define USB_PSY_VOTER		"USB_PSY_VOTER"
 
 bool is_client_vote_enabled(struct votable *votable, const char *client_str);
 bool is_client_vote_enabled_locked(struct votable *votable,

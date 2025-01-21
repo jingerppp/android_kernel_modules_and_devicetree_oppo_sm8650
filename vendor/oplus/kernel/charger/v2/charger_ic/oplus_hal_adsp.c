@@ -93,8 +93,9 @@ static bool is_common_topic_available(struct battery_chg_dev *bcdev);
 static bool oplus_get_ufcs_charging(struct battery_chg_dev *bcdev);
 __maybe_unused static bool oplus_get_pps_charging(struct battery_chg_dev *bcdev);
 static int oplus_chg_set_input_current(struct battery_chg_dev *bcdev, int current_ma);
-static int oplus_get_pps_info_from_adsp(struct oplus_chg_ic_dev *ic_dev, u32 *pdo, int num);
 #endif /*OPLUS_FEATURE_CHG_BASIC*/
+
+static int oplus_get_pps_info_from_adsp(struct oplus_chg_ic_dev *ic_dev, u32 *pdo, int num);
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
 /*for p922x compile*/
@@ -1384,7 +1385,7 @@ static void oplus_sourcecap_done_work(struct work_struct *work)
 	int max_pdo_current = 0;
 	int rc = 0;
 
-	rc = oplus_get_pps_info_from_adsp(bcdev->buck_ic, (u32 *)bcdev->pdo, PPS_PDO_MAX);
+	rc = oplus_get_pps_info_from_adsp(bcdev->buck_ic, (u32*)bcdev->pdo, PPS_PDO_MAX);
 	if (rc < 0) {
 		chg_err("get pdo info error\n");
 		return;

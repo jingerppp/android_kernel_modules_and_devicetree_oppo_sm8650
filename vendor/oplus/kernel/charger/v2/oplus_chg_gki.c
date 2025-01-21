@@ -60,6 +60,7 @@ struct oplus_gki_device {
 	struct votable *vooc_curr_votable;
 	struct votable *ufcs_curr_votable;
 	struct votable *pps_curr_votable;
+	struct votable *wired_suspend_votable;
 
 	struct delayed_work status_keep_clean_work;
 	struct delayed_work status_keep_delay_unlock_work;
@@ -170,6 +171,14 @@ is_pps_curr_votable_available(struct oplus_gki_device *chip)
 	if (!chip->pps_curr_votable)
 		chip->pps_curr_votable = find_votable("PPS_CURR");
 	return !!chip->pps_curr_votable;
+}
+
+__maybe_unused static bool
+is_wired_suspend_votable_available(struct oplus_gki_device *chip)
+{
+	if (!chip->wired_suspend_votable)
+		chip->wired_suspend_votable = find_votable("WIRED_CHARGE_SUSPEND");
+	return !!chip->wired_suspend_votable;
 }
 
 static bool is_main_gauge_topic_available(struct oplus_gki_device *chip)
@@ -412,14 +421,37 @@ static int usb_psy_get_prop(struct power_supply *psy,
 	return 0;
 }
 
+static void usb_psy_set_icl(struct oplus_gki_device *chip, int curr_ua)
+{
+	if (!chip) {
+		chg_err("chip null\n");
+		return;
+	}
+
+	if(chip->wired_type == OPLUS_CHG_USB_TYPE_SDP
+		|| chip->wired_type == OPLUS_CHG_USB_TYPE_PD_SDP)	{
+		if (((curr_ua / 1000) < 100)
+			&& is_wired_suspend_votable_available(chip)) {
+			vote(chip->wired_suspend_votable, USB_PSY_VOTER, true, 1, false);
+			chg_err("charger suspend by usb phy\n");
+		} else if (is_wired_suspend_votable_available(chip)) {
+			vote(chip->wired_suspend_votable, USB_PSY_VOTER, false, 0, false);
+			chg_err("charger unsuspend by usb phy\n");
+		}
+	}
+}
+
 static int usb_psy_set_prop(struct power_supply *psy,
 		enum power_supply_property prop,
 		const union power_supply_propval *pval)
 {
 	int rc = 0;
+	struct oplus_gki_device *chip = power_supply_get_drvdata(psy);
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
+		if (oplus_chg_get_common_charge_icl_support_flags())
+			usb_psy_set_icl(chip, pval->intval);
 		break;
 	default:
 		chg_err("set prop %d is not supported\n", prop);
@@ -1111,6 +1143,11 @@ static void oplus_gki_wired_online_update_work(struct work_struct *work)
 		if ((usb_psy_desc.type == POWER_SUPPLY_TYPE_UNKNOWN) &&
 			oplus_gki_bc12_is_completed(chip))
 			usb_psy_desc.type = POWER_SUPPLY_TYPE_USB_DCP;
+	}
+	if (chip->wired_type == OPLUS_CHG_USB_TYPE_UNKNOWN
+		&& is_wired_suspend_votable_available(chip)) {
+		chg_info("usb plug out, unsuspend input\n");
+		vote(chip->wired_suspend_votable, USB_PSY_VOTER, false, 0, false);
 	}
 	chg_info("psy_type=%d, usb_psy_desc_type=%d, wired_type=%d, pre_wired_type=%d,"
 		"retention_state =%d\n",

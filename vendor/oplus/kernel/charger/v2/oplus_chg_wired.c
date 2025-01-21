@@ -143,6 +143,7 @@ struct oplus_chg_wired {
 	struct completion pd_action_ack;
 	struct completion qc_check_ack;
 	struct completion pd_check_ack;
+	struct completion pd_svooc_wait_ack;
 
 	bool unwakelock_chg;
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0))
@@ -1181,6 +1182,13 @@ static void oplus_wired_wired_subs_callback(struct mms_subscribe *subs,
 		case WIRED_ITEM_CHARGER_VOL_MAX:
 			/* TODO */
 			break;
+		case WIRED_TIME_ABNORMAL_ADAPTER:
+			if ((is_pd_svooc_votable_available(chip) &&
+				!!get_effective_result(chip->pd_svooc_votable))) {
+				chg_err("pd_svooc, complete wait\n");
+				complete(&chip->pd_svooc_wait_ack);
+			}
+			break;
 		default:
 			break;
 		}
@@ -1287,6 +1295,7 @@ static void oplus_wired_plugin_work(struct work_struct *work)
 		complete_all(&chip->pd_action_ack);
 		complete_all(&chip->qc_check_ack);
 		complete_all(&chip->pd_check_ack);
+		complete_all(&chip->pd_svooc_wait_ack);
 		cancel_delayed_work_sync(&chip->qc_config_work);
 		cancel_delayed_work_sync(&chip->pd_config_work);
 		cancel_delayed_work_sync(&chip->switch_end_recheck_work);
@@ -1479,6 +1488,19 @@ static void oplus_wired_pd_check_work(struct work_struct *work)
 				return;
 			}
 		}
+
+		chg_err("start pd_svooc wait\n");
+		reinit_completion(&chip->pd_svooc_wait_ack);
+		rc = wait_for_completion_timeout(
+				&chip->pd_svooc_wait_ack, msecs_to_jiffies(200));
+		if (rc) {
+			chg_err("pd_svooc now\n");
+			oplus_cpa_switch_end(chip->cpa_topic, CHG_PROTOCOL_PD);
+			return;
+		} else {
+			chg_err("pd_svooc wait timeout\n");
+		}
+
 		if (get_client_vote(chip->pd_boost_disable_votable, SVID_VOTER) > 0) {
 			oplus_pd_cpa_switch_end(chip);
 			return;
@@ -2442,6 +2464,7 @@ static int oplus_wired_probe(struct platform_device *pdev)
 	init_completion(&chip->pd_action_ack);
 	init_completion(&chip->qc_check_ack);
 	init_completion(&chip->pd_check_ack);
+	init_completion(&chip->pd_svooc_wait_ack);
 	INIT_WORK(&chip->plugin_work, oplus_wired_plugin_work);
 	INIT_WORK(&chip->chg_type_change_work,
 		  oplus_wired_chg_type_change_work);
